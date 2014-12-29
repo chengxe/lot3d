@@ -1,0 +1,10 @@
+
+These raw codes have invoked function provided by "Machine Vision Toolbox", readers can download from http://www.petercorke.com/Toolbox_software.html. We assume readers have installed the toolbox correctly.
+
+
+1. open Matlab (version 2011a) in Windows 7 ultimate.
+
+2. open "demoTrackingSimu.m"
+
+3. run
+
