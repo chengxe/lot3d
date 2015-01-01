@@ -1,6 +1,6 @@
 function [trackers, numWorkers] = ParticleFilterTracking(stStereoModel, stTrackingParameter, trackers, tm0Frame, t,ismultijob, issimu)
     managerWorkers = 4;
-    trackersPerWorker = 30;
+    trackersPerWorker = 6;
     
     activatedIdxes = cat(2,trackers.activated);
     activatedIdxes = find(activatedIdxes>0);

@@ -48,36 +48,38 @@ function updatedTrackers = JobParticleFilterTracking(stStereoModel, stTrackingPa
                 warning('tracker %d, time %d, retry %d',idxesTracking(n), t, retry);
                 rng('shuffle'); continue;
             end
-            %
-            % 计算 orientation 和 candidate location
-            %
-            for v = 1 : stTrackingParameter.numCamera
-                gammas(v) = tm0Frame.cams(v).regions(occupiedRgn(v)).ellipse.radii(2) / tm0Frame.cams(v).regions(occupiedRgn(v)).ellipse.radii(1);
-                if ( tm0Frame.cams(v).regions(occupiedRgn(v)).ellipse2pixel > stTrackingParameter.threshold.merged )
-                    gammas(v) = 1 / tm0Frame.cams(v).regions(occupiedRgn(v)).ellipse2pixel;
+            if ( stTrackingParameter.haso )
+                %
+                % 计算 orientation 和 candidate location
+                %
+                for v = 1 : stTrackingParameter.numCamera
+                    gammas(v) = tm0Frame.cams(v).regions(occupiedRgn(v)).ellipse.radii(2) / tm0Frame.cams(v).regions(occupiedRgn(v)).ellipse.radii(1);
+                    if ( tm0Frame.cams(v).regions(occupiedRgn(v)).ellipse2pixel > stTrackingParameter.threshold.merged )
+                        gammas(v) = 1 / tm0Frame.cams(v).regions(occupiedRgn(v)).ellipse2pixel;
+                    end
                 end
+                [~, ix] = sort(gammas, 'descend'); ix = ix(1:2); ix = sort(ix, 'ascend');
+                d3Orientation = ReconstructOrientation(stStereoModel.cams(ix(1)), stStereoModel.cams(ix(2)),...
+                    tm0Frame.cams(ix(1)).regions(occupiedRgn(ix(1))).ellipse,...
+                    tm0Frame.cams(ix(2)).regions(occupiedRgn(ix(2))).ellipse, issimu);
+                d3Location = BinocularReconstruction(stStereoModel.cams(ix(1)), stStereoModel.cams(ix(2)),...
+                    tm0Frame.cams(ix(1)).regions(occupiedRgn(ix(1))).centroid,...
+                    tm0Frame.cams(ix(2)).regions(occupiedRgn(ix(2))).centroid);
+
+                if ( ~issimu )
+                    [theta0, phi0, ~] = cart2sph(d3Orientation(1), d3Orientation(3), -d3Orientation(2));
+                else
+                    [theta0, phi0, ~] = cart2sph(d3Orientation(1), d3Orientation(2), d3Orientation(3));
+                end
+                newState(4) = theta0; newState(5) = phi0;
+                %--------------------------
+                dis = distance(d3Location, newState(1:3));
+                if ( dis > stTrackingParameter.lenBody )
+                   newState(1:3) = (d3Location+newState(1:3)) / 2;
+                end
+                %--------------------------
             end
-            [~, ix] = sort(gammas, 'descend'); ix = ix(1:2); ix = sort(ix, 'ascend');
-            d3Orientation = ReconstructOrientation(stStereoModel.cams(ix(1)), stStereoModel.cams(ix(2)),...
-                tm0Frame.cams(ix(1)).regions(occupiedRgn(ix(1))).ellipse,...
-                tm0Frame.cams(ix(2)).regions(occupiedRgn(ix(2))).ellipse, issimu);
-            d3Location = BinocularReconstruction(stStereoModel.cams(ix(1)), stStereoModel.cams(ix(2)),...
-                tm0Frame.cams(ix(1)).regions(occupiedRgn(ix(1))).centroid,...
-                tm0Frame.cams(ix(2)).regions(occupiedRgn(ix(2))).centroid);
-            
-            if ( ~issimu )
-                [theta0, phi0, ~] = cart2sph(d3Orientation(1), d3Orientation(3), -d3Orientation(2));
-            else
-                [theta0, phi0, ~] = cart2sph(d3Orientation(1), d3Orientation(2), d3Orientation(3));
-            end
-            newState(4) = theta0; newState(5) = phi0;
-            %--------------------------
-            %dis = distance(d3Location, newState(1:3));
-            %if ( dis > stTrackingParameter.lenBody )
-            %    newState(1:3) = (d3Location+newState(1:3)) / 2;
-            %end
-            newState(1:3) = d3Location;
-            aTracker.states = [aTracker.states, newState];            
+            aTracker.states = [aTracker.states, newState];
             %----------------------------------------------------------------
             %[aTracker.particles, aTracker.weights] = InlineParticleResample(aTracker.particles, aTracker.weights, 'Systematic');
             aTracker.particles = repmat(aTracker.states(:,end),1,stTrackingParameter.numParticle);
@@ -132,11 +134,16 @@ end
 %
 function [occupiedRgn] = InlineFindExpectationOccupiedRgn(stStereoModel, stTrackingParameter, tm0Frame, expectation)
     
-    [x,y,z] = sphere(25);
-    x = 1.5*x(:)+expectation(1); y = 1.5*y(:) + expectation(2); z = 1.5*z(:) + expectation(3);
+    if ( stTrackingParameter.haso )
+        [d3Orientation(1), d3Orientation(2), d3Orientation(3)] = sph2cart(expectation(4), expectation(5), 1);
+        shape = GenerateBodyShape(stTrackingParameter.shape.profile, reshape(d3Orientation,3,1), expectation(1:3), 100);
+        d3Upsilon = shape.points;
+    else
+        d3Upsilon = bsxfun(@plus, stTrackingParameter.sphere, expectation(1:3));
+    end
     %----------------------------------------------------------------------------
     for v = 1 : stTrackingParameter.numCamera
-        d2Pixels = stStereoModel.cams(v).projection * [x'; y'; z'; ones(1,length(z))];
+        d2Pixels = stStereoModel.cams(v).projection * [d3Upsilon; ones(1,size(d3Upsilon, 2))];
         d2Pixels(1:2, :) = d2Pixels(1:2, :) ./ repmat(d2Pixels(3, :), 2, 1); d2Pixels = floor(d2Pixels(1:2,:)); d2Pixels = unique(d2Pixels','rows')';
         
         [occupiedRgns, overlappedSizes] = InlineFindOccupiedRegion(size(tm0Frame.cams(v).image),tm0Frame.cams(v).regions, d2Pixels);
