@@ -1,5 +1,6 @@
 
-These raw codes have invoked function provided by "Machine Vision Toolbox", readers can download from http://www.petercorke.com/Toolbox_software.html. 
+These raw codes have invoked functions provided by "Machine Vision Toolbox". 
+Readers can download the toolbox from http://www.petercorke.com/Toolbox_software.html. 
 We assume readers have installed the toolbox correctly. Or copy files in the "external" folder to the "lot3d" folder.
 
 
